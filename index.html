@@ -25,7 +25,7 @@ const API = "/api/runs";
 async function loadRuns() {
   const res = await fetch(API);
   if (!res.ok) throw new Error("Failed to load");
-  return res.json();
+  return res.json(); // now returns { runs, sha, mapsKey }
 }
 
 async function saveRuns(runs, sha) {
@@ -67,48 +67,49 @@ function Field({ label, children }) {
   );
 }
 
-function RunCard({ run, onRsvp, saving }) {
-  const [name, setName] = useState("");
-  const total  = run.rsvps.length + 1;
-  const met    = total >= run.minRunners;
-  const isPast = new Date(`${run.date}T${run.time||"23:59"}`) < new Date();
-  const dateStr = new Date(`${run.date}T${run.time||"12:00"}`).toLocaleDateString("en-US", {
-    weekday:"long", month:"short", day:"numeric"
-  });
+function RunCard({ run, onRsvp, saving, mapsKey }) {
+  // ... everything the same until the mapLink section, replace it with:
 
-  return (
-    <div style={{ background:"#141414", border:"1px solid #222", borderRadius:16, padding:20, marginBottom:14 }}>
-      {!isPast && (met
-        ? <div style={{ background:"#1a2e1a", border:"1px solid #2d5a2d", borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:13, color:"#6ee77a" }}>
-            ✅ Run is on — {total}/{run.minRunners} committed
-          </div>
-        : <div style={{ background:"#2a1f0a", border:"1px solid #5a3e10", borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:13, color:"#f5a623" }}>
-            ⚠️ Needs more runners — {total}/{run.minRunners} so far
-          </div>
-      )}
+  {run.mapLink && (
+    <div style={{ marginTop: 12 }}>
+      {mapsKey && (() => {
+        // Extract lat/lng from Google Maps URL if present
+        const coordMatch = run.mapLink.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+        const placeMatch = run.mapLink.match(/place\/([^/]+)/);
+        const qMatch     = run.mapLink.match(/[?&]q=([^&]+)/);
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-        <div>
-          <div style={{ fontSize:19, fontWeight:800, color:isPast?"#555":"#f0f0f0", letterSpacing:"-0.3px" }}>{dateStr}</div>
-          {run.time && <div style={{ fontSize:13, color:"#888", marginTop:2 }}>🕐 {run.time}</div>}
-          <div style={{ fontSize:13, color:"#777", marginTop:3 }}>
-            Posted by <span style={{ color:"#c8f97a", fontWeight:600 }}>{run.poster}</span>
-          </div>
-        </div>
-      </div>
+        let staticSrc = null;
+        if (coordMatch) {
+          const [, lat, lng] = coordMatch;
+          staticSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=560x200&scale=2&markers=color:red%7C${lat},${lng}&key=${mapsKey}`;
+        } else if (qMatch) {
+          const q = qMatch[1];
+          staticSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${q}&zoom=15&size=560x200&scale=2&markers=color:red%7C${q}&key=${mapsKey}`;
+        } else if (placeMatch) {
+          const q = placeMatch[1];
+          staticSrc = `https://maps.googleapis.com/maps/api/staticmap?center=${q}&zoom=15&size=560x200&scale=2&markers=color:red%7C${q}&key=${mapsKey}`;
+        }
 
-      <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:12 }}>
-        <Tag>{run.surface}</Tag>
-        <Tag>{run.pace}</Tag>
-        <Tag>{run.duration}</Tag>
-      </div>
+        return staticSrc ? (
+          <a href={run.mapLink} target="_blank" rel="noopener noreferrer" style={{ display:"block", borderRadius:10, overflow:"hidden", border:"1px solid #2e2e2e" }}>
+            <img src={staticSrc} alt="Map preview" style={{ width:"100%", display:"block", height:140, objectFit:"cover" }} />
+          </a>
+        ) : (
+          <a href={run.mapLink} target="_blank" rel="noopener noreferrer"
+            style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:13, color:"#7ab8f5", textDecoration:"none" }}>
+            📍 Starting point →
+          </a>
+        );
+      })()}
 
-      {run.mapLink && (
+      {!mapsKey && (
         <a href={run.mapLink} target="_blank" rel="noopener noreferrer"
-          style={{ display:"inline-flex", alignItems:"center", gap:5, marginTop:10, fontSize:13, color:"#7ab8f5", textDecoration:"none" }}>
+          style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:13, color:"#7ab8f5", textDecoration:"none" }}>
           📍 Starting point →
         </a>
       )}
+    </div>
+  )}
 
       {run.notes && (
         <div style={{ marginTop:10, background:"#1a1a1a", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#aaa", borderLeft:"3px solid #333" }}>
@@ -155,13 +156,18 @@ function App() {
   const [error,    setError]    = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form,     setForm]     = useState(EMPTY_FORM);
+  const [mapsKey, setMapsKey] = useState(null);
 
   useEffect(() => {
-    loadRuns()
-      .then(({ runs, sha }) => { setRuns(runs); setSha(sha); })
-      .catch(() => setError("Couldn't connect to the server. Make sure the site is deployed to Netlify with env vars set."))
-      .finally(() => setLoading(false));
-  }, []);
+  loadRuns()
+    .then(({ runs, sha, mapsKey }) => {
+      setRuns(runs);
+      setSha(sha);
+      setMapsKey(mapsKey);
+    })
+    .catch(() => setError("Couldn't connect to the server. Make sure the site is deployed to Netlify with env vars set."))
+    .finally(() => setLoading(false));
+}, []);
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }));
 
@@ -308,12 +314,12 @@ function App() {
           <div style={{ fontSize:11, fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Upcoming</div>
           {upcoming.length === 0
             ? <div style={{ textAlign:"center", padding:"30px 0", color:"#444", fontSize:14 }}>No runs posted yet — be the first! 👆</div>
-            : upcoming.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} />)
+            : upcoming.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} mapsKey={mapsKey} />)
           }
           {past.length > 0 && (
             <>
               <div style={{ fontSize:11, fontWeight:700, color:"#333", textTransform:"uppercase", letterSpacing:1, margin:"28px 0 12px" }}>Past Runs</div>
-              {past.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} />)}
+              {past.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} mapsKey={mapsKey} />)
             </>
           )}
         </>
