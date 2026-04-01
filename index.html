@@ -20,45 +20,29 @@
 <div id="root"></div>
 <script type="text/babel">
 
-// ── CONFIG ─────────────────────────────────────────────────────────────────
-const CONFIG = {
-  owner: "YOUR_GITHUB_USERNAME",
-  repo:  "YOUR_REPO_NAME",
-  path:  "runs.json",
-  token: "YOUR_GITHUB_TOKEN",
-};
-// ───────────────────────────────────────────────────────────────────────────
+const API = "/api/runs";
+
+async function loadRuns() {
+  const res = await fetch(API);
+  return res.json(); // { runs, sha }
+}
+
+async function saveRuns(runs, sha) {
+  const res = await fetch(API, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ runs, sha }),
+  });
+  const data = await res.json();
+  return data.sha;
+}
 
 const SURFACES  = ["Road 🏙️", "Trail 🌲", "Track 🏟️", "Mixed 🗺️"];
 const PACES     = ["Easy (10+ min/mi)", "Moderate (9–10)", "Tempo (8–9)", "Fast (<8 min/mi)"];
 const DURATIONS = ["20–30 min", "30–45 min", "45–60 min", "60–90 min", "90+ min"];
-
-async function ghFetch(runs) {
-  const r = await fetch(
-    `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}`,
-    { headers: { Authorization: `token ${CONFIG.token}`, Accept: "application/vnd.github.v3+json" }}
-  );
-  if (r.status === 404) return { runs: [], sha: null };
-  const d = await r.json();
-  return { runs: JSON.parse(atob(d.content.replace(/\n/g,""))).runs || [], sha: d.sha };
-}
-
-async function ghSave(runs, sha) {
-  const r = await fetch(
-    `https://api.github.com/repos/${CONFIG.owner}/${CONFIG.repo}/contents/${CONFIG.path}`,
-    {
-      method: "PUT",
-      headers: { Authorization: `token ${CONFIG.token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ message: "update runs", content: btoa(JSON.stringify({ runs }, null, 2)), ...(sha && { sha }) })
-    }
-  );
-  const d = await r.json();
-  return d.content.sha;
-}
+const EMPTY_FORM = { poster:"", date:"", time:"", surface:SURFACES[0], pace:PACES[0], duration:DURATIONS[0], mapLink:"", minRunners:2, notes:"" };
 
 const { useState, useEffect } = React;
-
-const EMPTY_FORM = { poster:"", date:"", time:"", surface: SURFACES[0], pace: PACES[0], duration: DURATIONS[0], mapLink:"", minRunners:2, notes:"" };
 
 function Tag({ children }) {
   return <span style={{ background:"#1e1e1e", border:"1px solid #2e2e2e", borderRadius:20, padding:"4px 12px", fontSize:13, color:"#ccc" }}>{children}</span>;
@@ -66,70 +50,51 @@ function Tag({ children }) {
 
 function RunCard({ run, onRsvp, saving }) {
   const [name, setName] = useState("");
-  const total = run.rsvps.length + 1;
-  const met   = total >= run.minRunners;
+  const total  = run.rsvps.length + 1;
+  const met    = total >= run.minRunners;
   const isPast = new Date(`${run.date}T${run.time||"23:59"}`) < new Date();
-
-  const dateStr = new Date(`${run.date}T${run.time||"12:00"}`).toLocaleDateString("en-US", {
-    weekday:"long", month:"short", day:"numeric"
-  });
+  const dateStr = new Date(`${run.date}T${run.time||"12:00"}`).toLocaleDateString("en-US", { weekday:"long", month:"short", day:"numeric" });
 
   return (
     <div style={{ background:"#141414", border:"1px solid #222", borderRadius:16, padding:20, marginBottom:14 }}>
-      {/* Status banner */}
-      {!isPast && (
-        met
-          ? <div style={{ background:"#1a2e1a", border:"1px solid #2d5a2d", borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:13, color:"#6ee77a" }}>✅ Run is on — {total}/{run.minRunners} committed</div>
-          : <div style={{ background:"#2a1f0a", border:"1px solid #5a3e10", borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:13, color:"#f5a623" }}>⚠️ Needs more runners — {total}/{run.minRunners} so far</div>
+      {!isPast && (met
+        ? <div style={{ background:"#1a2e1a", border:"1px solid #2d5a2d", borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:13, color:"#6ee77a" }}>✅ Run is on — {total}/{run.minRunners} committed</div>
+        : <div style={{ background:"#2a1f0a", border:"1px solid #5a3e10", borderRadius:8, padding:"8px 12px", marginBottom:12, fontSize:13, color:"#f5a623" }}>⚠️ Needs more runners — {total}/{run.minRunners} so far</div>
       )}
-
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
         <div>
-          <div style={{ fontSize:19, fontWeight:800, color: isPast?"#666":"#f0f0f0", letterSpacing:"-0.3px" }}>{dateStr}</div>
+          <div style={{ fontSize:19, fontWeight:800, color:isPast?"#555":"#f0f0f0", letterSpacing:"-0.3px" }}>{dateStr}</div>
           {run.time && <div style={{ fontSize:13, color:"#888", marginTop:2 }}>🕐 {run.time}</div>}
           <div style={{ fontSize:13, color:"#777", marginTop:3 }}>Posted by <span style={{ color:"#c8f97a", fontWeight:600 }}>{run.poster}</span></div>
         </div>
       </div>
-
       <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:12 }}>
-        <Tag>{run.surface}</Tag>
-        <Tag>{run.pace}</Tag>
-        <Tag>{run.duration}</Tag>
+        <Tag>{run.surface}</Tag><Tag>{run.pace}</Tag><Tag>{run.duration}</Tag>
       </div>
-
       {run.mapLink && (
         <a href={run.mapLink} target="_blank" rel="noopener noreferrer"
           style={{ display:"inline-flex", alignItems:"center", gap:5, marginTop:10, fontSize:13, color:"#7ab8f5", textDecoration:"none" }}>
           📍 Starting point →
         </a>
       )}
-
       {run.notes && (
         <div style={{ marginTop:10, background:"#1a1a1a", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#aaa", borderLeft:"3px solid #333" }}>
           {run.notes}
         </div>
       )}
-
-      {/* Runners list */}
       <div style={{ marginTop:14, paddingTop:12, borderTop:"1px solid #1e1e1e" }}>
         <div style={{ fontSize:13, color:"#777", marginBottom:10 }}>
           🏃 <span style={{ color:"#c8f97a" }}>{run.poster}</span>
           {run.rsvps.map(n => <span key={n}>, <span style={{ color:"#c8f97a" }}>{n}</span></span>)}
         </div>
-
         {!isPast && (
           <div style={{ display:"flex", gap:8 }}>
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              onKeyDown={e => { if (e.key==="Enter" && name.trim()) { onRsvp(run.id, name.trim()); setName(""); }}}
+            <input value={name} onChange={e => setName(e.target.value)}
+              onKeyDown={e => { if(e.key==="Enter" && name.trim()){ onRsvp(run.id, name.trim()); setName(""); }}}
               placeholder="Your name to RSVP..."
-              style={{ flex:1, background:"#1a1a1a", border:"1px solid #2e2e2e", borderRadius:8, padding:"9px 12px", fontSize:14, color:"#f0f0f0" }}
-            />
-            <button
-              disabled={saving || !name.trim()}
-              onClick={() => { onRsvp(run.id, name.trim()); setName(""); }}
-              style={{ background:"#c8f97a", color:"#0d0d0d", border:"none", borderRadius:8, padding:"9px 18px", fontSize:14, fontWeight:800, cursor:"pointer", opacity: (!name.trim()||saving)?0.4:1 }}>
+              style={{ flex:1, background:"#1a1a1a", border:"1px solid #2e2e2e", borderRadius:8, padding:"9px 12px", fontSize:14, color:"#f0f0f0" }} />
+            <button disabled={saving || !name.trim()} onClick={() => { onRsvp(run.id, name.trim()); setName(""); }}
+              style={{ background:"#c8f97a", color:"#0d0d0d", border:"none", borderRadius:8, padding:"9px 18px", fontSize:14, fontWeight:800, cursor:"pointer", opacity:(!name.trim()||saving)?0.4:1 }}>
               I'm in!
             </button>
           </div>
@@ -140,30 +105,29 @@ function RunCard({ run, onRsvp, saving }) {
 }
 
 function App() {
-  const [runs,    setRuns]    = useState([]);
-  const [sha,     setSha]     = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState(null);
-  const [showForm,setShowForm]= useState(false);
-  const [form,    setForm]    = useState(EMPTY_FORM);
+  const [runs,     setRuns]     = useState([]);
+  const [sha,      setSha]      = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [error,    setError]    = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form,     setForm]     = useState(EMPTY_FORM);
 
   useEffect(() => {
-    ghFetch()
+    loadRuns()
       .then(({ runs, sha }) => { setRuns(runs); setSha(sha); })
-      .catch(() => setError("Couldn't load runs. Double-check your CONFIG at the top of the file."))
+      .catch(() => setError("Couldn't load runs. Check your Netlify env vars."))
       .finally(() => setLoading(false));
   }, []);
 
   const postRun = async e => {
-    e.preventDefault();
-    setSaving(true);
-    const newRun = { id: Date.now().toString(), ...form, minRunners: parseInt(form.minRunners)||2, rsvps: [], createdAt: new Date().toISOString() };
+    e.preventDefault(); setSaving(true);
+    const newRun = { id: Date.now().toString(), ...form, minRunners: parseInt(form.minRunners)||2, rsvps:[], createdAt: new Date().toISOString() };
     const updated = [newRun, ...runs];
     try {
-      const newSha = await ghSave(updated, sha);
+      const newSha = await saveRuns(updated, sha);
       setRuns(updated); setSha(newSha); setShowForm(false); setForm(EMPTY_FORM);
-    } catch { setError("Failed to post. Check your token has write access."); }
+    } catch { setError("Failed to post. Check Netlify function logs."); }
     setSaving(false);
   };
 
@@ -172,9 +136,9 @@ function App() {
     const updated = runs.map(r => r.id===id && !r.rsvps.includes(name) ? {...r, rsvps:[...r.rsvps,name]} : r);
     setSaving(true);
     try {
-      const newSha = await ghSave(updated, sha);
+      const newSha = await saveRuns(updated, sha);
       setRuns(updated); setSha(newSha);
-    } catch { setError("Failed to RSVP. Try again."); }
+    } catch { setError("RSVP failed. Try again."); }
     setSaving(false);
   };
 
@@ -190,12 +154,10 @@ function App() {
       {children}
     </div>
   );
-  const inputStyle = { width:"100%", background:"#1a1a1a", border:"1px solid #2e2e2e", borderRadius:8, padding:"10px 12px", fontSize:14, color:"#f0f0f0" };
+  const iStyle = { width:"100%", background:"#1a1a1a", border:"1px solid #2e2e2e", borderRadius:8, padding:"10px 12px", fontSize:14, color:"#f0f0f0" };
 
   return (
     <div style={{ maxWidth:600, margin:"0 auto", padding:"0 16px 80px" }}>
-
-      {/* Header */}
       <div style={{ padding:"36px 0 24px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div>
           <h1 style={{ fontSize:32, fontWeight:900, color:"#f0f0f0", letterSpacing:"-1px" }}>Critical Más 🏃</h1>
@@ -203,68 +165,48 @@ function App() {
         </div>
         {!showForm && (
           <button onClick={() => setShowForm(true)}
-            style={{ background:"#c8f97a", color:"#0d0d0d", border:"none", borderRadius:10, padding:"10px 18px", fontSize:14, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap" }}>
+            style={{ background:"#c8f97a", color:"#0d0d0d", border:"none", borderRadius:10, padding:"10px 18px", fontSize:14, fontWeight:800, cursor:"pointer" }}>
             + Post Run
           </button>
         )}
       </div>
 
-      {/* Error */}
       {error && (
         <div style={{ background:"#2a0a0a", border:"1px solid #5a1010", borderRadius:10, padding:"12px 16px", marginBottom:16, fontSize:13, color:"#f87171", display:"flex", justifyContent:"space-between" }}>
-          {error}
-          <button onClick={() => setError(null)} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer" }}>✕</button>
+          {error} <button onClick={() => setError(null)} style={{ background:"none", border:"none", color:"#f87171", cursor:"pointer" }}>✕</button>
         </div>
       )}
 
-      {/* New Run Form */}
       {showForm && (
         <form onSubmit={postRun} style={{ background:"#141414", border:"1px solid #222", borderRadius:16, padding:20, marginBottom:20 }}>
           <h2 style={{ fontSize:17, fontWeight:800, marginBottom:18, color:"#f0f0f0" }}>New Run</h2>
-
           <Field label="Your name *">
-            <input required placeholder="e.g. Alex" value={form.poster}
-              onChange={e => setForm(p=>({...p,poster:e.target.value}))} style={inputStyle} />
+            <input required placeholder="e.g. Alex" value={form.poster} onChange={e => setForm(p=>({...p,poster:e.target.value}))} style={iStyle} />
           </Field>
-
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <Field label="Date *">
-              <input required type="date" value={form.date}
-                onChange={e => setForm(p=>({...p,date:e.target.value}))} style={inputStyle} />
+              <input required type="date" value={form.date} onChange={e => setForm(p=>({...p,date:e.target.value}))} style={iStyle} />
             </Field>
             <Field label="Time">
-              <input type="time" value={form.time}
-                onChange={e => setForm(p=>({...p,time:e.target.value}))} style={inputStyle} />
+              <input type="time" value={form.time} onChange={e => setForm(p=>({...p,time:e.target.value}))} style={iStyle} />
             </Field>
           </div>
-
-          {[
-            { label:"Surface",  field:"surface",  options: SURFACES  },
-            { label:"Pace",     field:"pace",     options: PACES     },
-            { label:"Duration", field:"duration", options: DURATIONS },
-          ].map(({ label, field, options }) => (
+          {[{label:"Surface",field:"surface",options:SURFACES},{label:"Pace",field:"pace",options:PACES},{label:"Duration",field:"duration",options:DURATIONS}].map(({label,field,options})=>(
             <Field key={field} label={label}>
-              <select value={form[field]} onChange={e => setForm(p=>({...p,[field]:e.target.value}))} style={inputStyle}>
-                {options.map(o => <option key={o}>{o}</option>)}
+              <select value={form[field]} onChange={e => setForm(p=>({...p,[field]:e.target.value}))} style={iStyle}>
+                {options.map(o=><option key={o}>{o}</option>)}
               </select>
             </Field>
           ))}
-
-          <Field label="Google Maps link (starting point)">
-            <input type="url" placeholder="https://maps.google.com/..." value={form.mapLink}
-              onChange={e => setForm(p=>({...p,mapLink:e.target.value}))} style={inputStyle} />
+          <Field label="Google Maps link">
+            <input type="url" placeholder="https://maps.google.com/..." value={form.mapLink} onChange={e => setForm(p=>({...p,mapLink:e.target.value}))} style={iStyle} />
           </Field>
-
-          <Field label="Min runners needed (including you)">
-            <input type="number" min={1} max={20} value={form.minRunners}
-              onChange={e => setForm(p=>({...p,minRunners:e.target.value}))} style={{...inputStyle, width:100}} />
+          <Field label="Min runners (including you)">
+            <input type="number" min={1} max={20} value={form.minRunners} onChange={e => setForm(p=>({...p,minRunners:e.target.value}))} style={{...iStyle, width:100}} />
           </Field>
-
           <Field label="Notes (optional)">
-            <textarea placeholder="Meet at the trailhead, bring water..." value={form.notes} rows={2}
-              onChange={e => setForm(p=>({...p,notes:e.target.value}))} style={{...inputStyle, resize:"vertical"}} />
+            <textarea placeholder="Meet at the trailhead, bring water..." value={form.notes} rows={2} onChange={e => setForm(p=>({...p,notes:e.target.value}))} style={{...iStyle, resize:"vertical"}} />
           </Field>
-
           <div style={{ display:"flex", gap:10, marginTop:4 }}>
             <button type="button" onClick={() => { setShowForm(false); setForm(EMPTY_FORM); }}
               style={{ flex:1, background:"#1a1a1a", border:"1px solid #2e2e2e", borderRadius:10, padding:13, fontSize:14, color:"#888", cursor:"pointer", fontWeight:600 }}>
@@ -278,31 +220,19 @@ function App() {
         </form>
       )}
 
-      {/* Loading */}
-      {loading && (
-        <div style={{ textAlign:"center", padding:"60px 0", color:"#555" }}>
-          <div style={{ fontSize:36, marginBottom:10 }}>🏃</div>
-          Loading runs...
-        </div>
-      )}
+      {loading && <div style={{ textAlign:"center", padding:"60px 0", color:"#555" }}><div style={{ fontSize:36, marginBottom:10 }}>🏃</div>Loading runs...</div>}
 
-      {/* Upcoming */}
-      {!loading && (
-        <>
-          <div style={{ fontSize:11, fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Upcoming</div>
-          {upcoming.length === 0
-            ? <div style={{ textAlign:"center", padding:"30px 0", color:"#444", fontSize:14 }}>No runs posted yet — be the first! 👆</div>
-            : upcoming.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} />)
-          }
-
-          {past.length > 0 && (
-            <>
-              <div style={{ fontSize:11, fontWeight:700, color:"#333", textTransform:"uppercase", letterSpacing:1, margin:"28px 0 12px" }}>Past Runs</div>
-              {past.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} />)}
-            </>
-          )}
-        </>
-      )}
+      {!loading && <>
+        <div style={{ fontSize:11, fontWeight:700, color:"#555", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Upcoming</div>
+        {upcoming.length === 0
+          ? <div style={{ textAlign:"center", padding:"30px 0", color:"#444", fontSize:14 }}>No runs posted yet — be the first! 👆</div>
+          : upcoming.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} />)
+        }
+        {past.length > 0 && <>
+          <div style={{ fontSize:11, fontWeight:700, color:"#333", textTransform:"uppercase", letterSpacing:1, margin:"28px 0 12px" }}>Past Runs</div>
+          {past.map(r => <RunCard key={r.id} run={r} onRsvp={rsvp} saving={saving} />)}
+        </>}
+      </>}
     </div>
   );
 }
@@ -311,3 +241,17 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
 </html>
+```
+
+---
+
+## Setup Steps
+
+**1. Create the folder structure on your computer**
+```
+critical-mas/
+├── index.html          ← paste File 3 above
+├── netlify.toml        ← paste File 1 above
+└── netlify/
+    └── functions/
+        └── runs.js     ← paste File 2 above
