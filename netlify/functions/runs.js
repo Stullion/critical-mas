@@ -1,6 +1,7 @@
 const OWNER = process.env.GH_OWNER;
 const REPO  = process.env.GH_REPO;
 const TOKEN = process.env.GH_TOKEN;
+const MAPS_KEY = process.env.GOOGLE_MAPS_KEY;
 const PATH  = "runs.json";
 
 const ghUrl = `https://api.github.com/repos/${OWNER}/${REPO}/contents/${PATH}`;
@@ -21,22 +22,20 @@ exports.handler = async (event) => {
     return { statusCode: 204, headers: cors };
   }
 
-  // GET — load runs
   if (event.httpMethod === "GET") {
     const res = await fetch(ghUrl, { headers: ghHeaders });
     if (res.status === 404) {
-      return { statusCode: 200, headers: cors, body: JSON.stringify({ runs: [], sha: null }) };
+      return { statusCode: 200, headers: cors, body: JSON.stringify({ runs: [], sha: null, mapsKey: MAPS_KEY }) };
     }
     const data = await res.json();
     const content = JSON.parse(Buffer.from(data.content, "base64").toString("utf8"));
     return {
       statusCode: 200,
       headers: cors,
-      body: JSON.stringify({ runs: content.runs || [], sha: data.sha }),
+      body: JSON.stringify({ runs: content.runs || [], sha: data.sha, mapsKey: MAPS_KEY }),
     };
   }
 
-  // PUT — save runs
   if (event.httpMethod === "PUT") {
     const { runs, sha } = JSON.parse(event.body);
     const content = Buffer.from(JSON.stringify({ runs }, null, 2)).toString("base64");
