@@ -1,6 +1,20 @@
 {
   "runs": [
     {
+      "id": "1775519850879",
+      "poster": "Daniel Stull",
+      "date": "2026-04-06",
+      "time": "18:00",
+      "surface": "Road 🏙️",
+      "pace": "Easy (10+ min/mi)",
+      "duration": "20–30 min",
+      "mapLink": "https://maps.app.goo.gl/M1u6FDh4vY3cgULy7",
+      "minRunners": 2,
+      "notes": "",
+      "rsvps": [],
+      "createdAt": "2026-04-06T23:57:30.879Z"
+    },
+    {
       "id": "1775069726490",
       "poster": "Testy McTestface",
       "date": "2026-04-30",
