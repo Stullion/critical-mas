@@ -84,20 +84,7 @@ function RunCard({ run, onRsvp, saving, mapsKey }) {
     weekday:"long", month:"short", day:"numeric"
   });
 
-  const getStaticSrc = () => {
-    if (!mapsKey || !run.mapLink) return null;
-    const coordMatch = run.mapLink.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
-    const qMatch     = run.mapLink.match(/[?&]q=([^&]+)/);
-    const placeMatch = run.mapLink.match(/place\/([^/]+)/);
-    let center = null;
-    if (coordMatch)      center = `${coordMatch[1]},${coordMatch[2]}`;
-    else if (qMatch)     center = qMatch[1];
-    else if (placeMatch) center = placeMatch[1];
-    if (!center) return null;
-    return `https://maps.googleapis.com/maps/api/staticmap?center=${center}&zoom=15&size=560x200&scale=2&markers=color:red%7C${center}&key=${mapsKey}`;
-  };
-
-  const staticSrc = getStaticSrc();
+  const staticSrc = run.staticMapUrl || null;
 
   return (
     <div id={`run-${run.id}`} style={{ background:"#141414", border:"1px solid #222", borderRadius:16, padding:20, marginBottom:14 }}>
