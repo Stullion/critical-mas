@@ -11,6 +11,25 @@ const ghHeaders = {
   "Content-Type": "application/json",
 };
 
+async function expandUrl(shortUrl) {
+  try {
+    const res = await fetch(shortUrl, { method: "HEAD", redirect: "follow" });
+    return res.url;
+  } catch {
+    return shortUrl;
+  }
+}
+
+function extractCoords(url) {
+  const coordMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+  if (coordMatch) return `${coordMatch[1]},${coordMatch[2]}`;
+  const qMatch = url.match(/[?&]q=([^&]+)/);
+  if (qMatch) return qMatch[1];
+  const placeMatch = url.match(/place\/([^/]+)/);
+  if (placeMatch) return placeMatch[1];
+  return null;
+}
+
 exports.handler = async (event) => {
   const cors = {
     "Access-Control-Allow-Origin": "*",
@@ -29,10 +48,22 @@ exports.handler = async (event) => {
     }
     const data = await res.json();
     const content = JSON.parse(Buffer.from(data.content, "base64").toString("utf8"));
+    const runs = content.runs || [];
+
+    // Expand shortened map URLs and attach a staticMapUrl to each run
+    const runsWithMaps = await Promise.all(runs.map(async (run) => {
+      if (!run.mapLink || !MAPS_KEY) return run;
+      const expanded = await expandUrl(run.mapLink);
+      const center = extractCoords(expanded);
+      if (!center) return run;
+      const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${center}&zoom=15&size=560x200&scale=2&markers=color:red%7C${center}&key=${MAPS_KEY}`;
+      return { ...run, staticMapUrl };
+    }));
+
     return {
       statusCode: 200,
       headers: cors,
-      body: JSON.stringify({ runs: content.runs || [], sha: data.sha, mapsKey: MAPS_KEY }),
+      body: JSON.stringify({ runs: runsWithMaps, sha: data.sha, mapsKey: MAPS_KEY }),
     };
   }
 
